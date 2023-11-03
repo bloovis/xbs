@@ -106,28 +106,34 @@ class BookmarksDB
     end
   end
 
-  # Create empty bookmarks record
-  def create_bookmarks
-    id = UUID.random.hexstring
+  # Create empty bookmarks record, return JSON response.
+  def create_bookmarks : String
+    uuid = UUID.random.hexstring
     bookmarks = ""
     t = Time.utc
     lastupdated = Time::Format::ISO_8601_DATE_TIME.format(t)
-    MyLog.debug "insert into #{@table} values (#{id}, #{bookmarks}, #{@version}, #{lastupdated})"
+    MyLog.debug "insert into #{@table} values (#{uuid}, #{bookmarks}, #{@version}, #{lastupdated})"
     sql = "insert into #{@table} values (?, ?, ?, ?)"
-    @db.exec sql, id, bookmarks, @version, lastupdated
+    @db.exec sql, uuid, bookmarks, @version, lastupdated
+    return {"id" => uuid, "lastUpdated" => lastupdated, "version" => @version}.to_json
   end
 
-  # Get bookmarks for given ID.
-  def get_bookmarks(id : String)
+  # Get bookmarks for given ID, return JSON response.
+  def get_bookmarks(id : String) : String
     url = nil
     if @db
       begin
 	MyLog.debug "Attempting to get bookmarks for id #{id} from #{@dbname}:#{@table}"
-	sql = "select bookmarks from #{@table} where id = ? limit 1"
+	sql = "select bookmarks,lastupdated,version from #{@table} where uuid = ?"
 	MyLog.debug "Executing #{sql}, ? = #{id}"
-	bookmarks = @db.query_one?(sql, id, as: String)
+	bookmarks = ""
+	lastupdated = ""
+	version = ""
+	bookmarks, lastupdated, version = @db.query_one(sql, id, as: {String, String, String})
 	if bookmarks
 	  MyLog.debug "Got bookmarks for #{id} from sqlite3 query #{sql}"
+	  return {"bookmarks" => bookmarks, "lastUpdated" => lastupdated,
+	          "version" => version}.to_json
 	else
 	  MyLog.debug "Unable to find #{id} in sqlite3"
 	end
@@ -135,7 +141,7 @@ class BookmarksDB
 	MyLog.error "sqlite3 exception: #{ex.message}"
       end
     end
-    return bookmarks
+    return ""
   end
 end
 
@@ -164,13 +170,18 @@ class Server
         puts "update bookmarks for #{id}"
       elsif method == "GET"
         puts "get bookmarks for #{id}"
+	json = @db.get_bookmarks(id)
+	context.response.content_type = "application/json"
+        context.response.print json
       else
 	puts "unknown method for bookmarks/ID"
       end
     elsif path == "/bookmarks"
       if method == "PUT"
 	puts "create new bookmarks ID"
-	@db.create_bookmarks
+	json = @db.create_bookmarks
+	context.response.content_type = "application/json"
+        context.response.print json
       else
 	puts "/bookmarks not called with PUT!"
       end

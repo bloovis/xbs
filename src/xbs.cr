@@ -19,10 +19,12 @@ class Config
   getter cert : (String|Nil)
   getter log : (String|Nil)
   getter loglevel : (String|Nil)
-  getter version : (String|Nil)
-  getter maxsyncsize : (Int32|Nil)
-  getter status : (Int32|Nil)
-  getter message : (String|Nil)
+
+  # Optional settings that get default values if not specified.
+  getter version : String
+  getter maxsyncsize : Int32
+  getter status : Int32
+  getter message : String
 
   def initialize(config_file : String)
     yaml = File.open(config_file) {|file| YAML.parse(file) }
@@ -156,9 +158,6 @@ class BookmarksDB
 	MyLog.debug "Attempting to get bookmarks for id #{id} from #{@dbname}:#{@table}"
 	sql = "select bookmarks,lastupdated,version from #{@table} where uuid = ?"
 	MyLog.debug "Executing #{sql}, ? = #{id}"
-	bookmarks = ""
-	lastupdated = ""
-	version = ""
 	bookmarks, lastupdated, version = @db.query_one(sql, id, as: {String, String, String})
 	if bookmarks
 	  MyLog.debug "Got bookmarks for #{id} from sqlite3 query #{sql}"
@@ -253,18 +252,16 @@ class Server
     MyLog.debug "process_request: got path #{path}, method #{method}"
 
     puts "Got request method #{method}, path #{path}"
+    json = ""
+    text = ""
     if path =~ /bookmarks\/([[:xdigit:]]+)\/version/
       id = $1
       puts "Get sync version for ID #{id}"
       json = @db.get_syncversion(id)
-      context.response.content_type = "application/json"
-      context.response.print json
     elsif path =~ /bookmarks\/([[:xdigit:]]+)\/lastUpdated/
       id = $1
       puts "Get last updated timestamp for ID #{id}"
       json = @db.get_lastupdated(id)
-      context.response.content_type = "application/json"
-      context.response.print json
     elsif path =~ /bookmarks\/([[:xdigit:]]+)/
       id = $1
       if method == "PUT"
@@ -277,13 +274,9 @@ class Server
 	content_type = request.headers["Content-Type"]
         puts "update bookmarks for #{id}, content-type #{content_type}, body '#{bodystr}'"
 	json = @db.update_bookmarks(id, content_type, bodystr)
-	context.response.content_type = "application/json"
-        context.response.print json
       elsif method == "GET"
         puts "get bookmarks for #{id}"
 	json = @db.get_bookmarks(id)
-	context.response.content_type = "application/json"
-        context.response.print json
       else
 	puts "unknown method for bookmarks/ID"
       end
@@ -291,8 +284,6 @@ class Server
       if method == "PUT"
 	puts "create new bookmarks ID"
 	json = @db.create_bookmarks
-	context.response.content_type = "application/json"
-        context.response.print json
       else
 	puts "/bookmarks not called with PUT!"
       end
@@ -302,14 +293,17 @@ class Server
 	      "message" => @config.message,
 	      "status" => @config.status,
 	      "version" => @config.version}.to_json
+    elsif path == "/"
+      text = @config.message
+    else
+      text = "Unrecognized request"
+    end
+    if json.size > 0
       context.response.content_type = "application/json"
       context.response.print json
-    elsif path == "/"
+    elsif text.size > 0
       context.response.content_type = "text/plain"
-      context.response.print @config.message
-    else
-      context.response.content_type = "text/plain"
-      context.response.print "Unrecognized request"
+      context.response.print text
     end
   end
 

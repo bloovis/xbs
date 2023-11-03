@@ -62,6 +62,10 @@ class Config
     end
     if yaml["status"]?
       @status = yaml["status"].as_i
+      if status < 1 || status > 3
+	puts "Invalid status #{status}.  Must be between 1 and 3"
+	exit 1
+      end
     else
       @status = 1
     end
@@ -114,6 +118,7 @@ end
 class BookmarksDB
   def initialize(config : Config)
     # Set up the database connection.
+    @config = config
     @dbname = config.db
     @db = uninitialized DB::Database	# This avoids compiler error
     @db = DB.open "sqlite3://#{@dbname}"
@@ -140,6 +145,9 @@ class BookmarksDB
 
   # Create empty bookmarks record, return JSON response.
   def create_bookmarks : String
+    if @config.status == 3
+      return "503:xbs is not accepting new syncs"
+    end
     uuid = UUID.random.hexstring
     bookmarks = ""
     t = Time.utc
@@ -165,6 +173,7 @@ class BookmarksDB
 	          "version" => version}.to_json
 	else
 	  MyLog.debug "Unable to find #{id} in sqlite3"
+	  return "404:No such ID"
 	end
       rescue ex
 	MyLog.error "sqlite3 exception: #{ex.message}"
@@ -187,6 +196,7 @@ class BookmarksDB
 	  return {"lastUpdated" => lastupdated}.to_json
 	else
 	  MyLog.debug "Unable to find #{id} in sqlite3"
+	  return "404:No such ID"
 	end
       rescue ex
 	MyLog.error "sqlite3 exception: #{ex.message}"
@@ -209,6 +219,7 @@ class BookmarksDB
 	  return {"version" => version}.to_json
 	else
 	  MyLog.debug "Unable to find #{id} in sqlite3"
+	  return "404:No such ID"
 	end
       rescue ex
 	MyLog.error "sqlite3 exception: #{ex.message}"
@@ -231,6 +242,7 @@ class BookmarksDB
 	return {"lastUpdated" => lastupdated}.to_json
       rescue ex
 	MyLog.error "sqlite3 exception: #{ex.message}"
+        return "404:No such ID"
       end
     end
     return ""
@@ -252,6 +264,10 @@ class Server
     MyLog.debug "process_request: got path #{path}, method #{method}"
 
     puts "Got request method #{method}, path #{path}"
+    if @config.status == 2
+      context.response.respond_with_status(503, "xbs is offline")
+      return
+    end
     json = ""
     text = ""
     if path =~ /bookmarks\/([[:xdigit:]]+)\/version/
@@ -272,13 +288,19 @@ class Server
 	  bodystr = body.gets_to_end
 	end
 	content_type = request.headers["Content-Type"]
-        puts "update bookmarks for #{id}, content-type #{content_type}, body '#{bodystr}'"
-	json = @db.update_bookmarks(id, content_type, bodystr)
+	bodysize = bodystr.size
+	maxsize = @config.maxsyncsize
+        puts "update bookmarks for #{id}, content-type #{content_type}, body '#{bodystr}', size #{bodysize}, max #{maxsize}"
+	if bodysize > maxsize
+	  json = "507:Bookmark data size #{bodysize} exceeded maximum of #{maxsize} bytes"
+	else
+	  json = @db.update_bookmarks(id, content_type, bodystr)
+	end
       elsif method == "GET"
         puts "get bookmarks for #{id}"
 	json = @db.get_bookmarks(id)
       else
-	puts "unknown method for bookmarks/ID"
+	json = "501:unknown method for bookmarks/ID"
       end
     elsif path == "/bookmarks"
       if method == "PUT"
@@ -299,8 +321,17 @@ class Server
       text = "Unrecognized request"
     end
     if json.size > 0
-      context.response.content_type = "application/json"
-      context.response.print json
+      if json =~ /^(\d+):(.+)$/
+	# Handle special case of NNN:message, where NNN is an HTTP status code,
+	# and message is the message to send back.
+	status = $1.to_i
+	message = $2
+	puts "Respond with status #{status}, message #{message}"
+	context.response.respond_with_status(status, message)
+      else
+	context.response.content_type = "application/json"
+        context.response.print json
+      end
     elsif text.size > 0
       context.response.content_type = "text/plain"
       context.response.print text

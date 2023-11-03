@@ -303,11 +303,11 @@ class Server
 	json = "501:unknown method for bookmarks/ID"
       end
     elsif path == "/bookmarks"
-      if method == "PUT"
+      if method == "POST"
 	puts "create new bookmarks ID"
 	json = @db.create_bookmarks
       else
-	puts "/bookmarks not called with PUT!"
+	puts "/bookmarks not called with POST!"
       end
     elsif path == "/info"
       puts "Get service information"

@@ -137,7 +137,9 @@ curl 'http://localhost:8090/bookmarks/ID'
 
 ### Get lastUpdated
 
+```
 curl 'http://localhost:8090/bookmarks/ID/lastUpdated'
+```
 
 ### Get sync version
 

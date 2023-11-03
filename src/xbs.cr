@@ -263,7 +263,6 @@ class Server
     method = request.method
     MyLog.debug "process_request: got path #{path}, method #{method}"
 
-    puts "Got request method #{method}, path #{path}"
     if @config.status == 2
       context.response.respond_with_status(503, "xbs is offline")
       return
@@ -272,11 +271,9 @@ class Server
     text = ""
     if path =~ /bookmarks\/([[:xdigit:]]+)\/version/
       id = $1
-      puts "Get sync version for ID #{id}"
       json = @db.get_syncversion(id)
     elsif path =~ /bookmarks\/([[:xdigit:]]+)\/lastUpdated/
       id = $1
-      puts "Get last updated timestamp for ID #{id}"
       json = @db.get_lastupdated(id)
     elsif path =~ /bookmarks\/([[:xdigit:]]+)/
       id = $1
@@ -290,27 +287,23 @@ class Server
 	content_type = request.headers["Content-Type"]
 	bodysize = bodystr.size
 	maxsize = @config.maxsyncsize
-        puts "update bookmarks for #{id}, content-type #{content_type}, body '#{bodystr}', size #{bodysize}, max #{maxsize}"
 	if bodysize > maxsize
 	  json = "507:Bookmark data size #{bodysize} exceeded maximum of #{maxsize} bytes"
 	else
 	  json = @db.update_bookmarks(id, content_type, bodystr)
 	end
       elsif method == "GET"
-        puts "get bookmarks for #{id}"
 	json = @db.get_bookmarks(id)
       else
 	json = "501:unknown method for bookmarks/ID"
       end
     elsif path == "/bookmarks"
       if method == "POST"
-	puts "create new bookmarks ID"
 	json = @db.create_bookmarks
       else
-	puts "/bookmarks not called with POST!"
+	MyLog.error "/bookmarks not called with POST"
       end
     elsif path == "/info"
-      puts "Get service information"
       json = {"maxSyncSize" => @config.maxsyncsize,
 	      "message" => @config.message,
 	      "status" => @config.status,
@@ -326,7 +319,6 @@ class Server
 	# and message is the message to send back.
 	status = $1.to_i
 	message = $2
-	puts "Respond with status #{status}, message #{message}"
 	context.response.respond_with_status(status, message)
       else
 	context.response.content_type = "application/json"

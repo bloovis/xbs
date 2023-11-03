@@ -1,0 +1,19 @@
+name: xbs
+version: 0.1.0
+
+authors:
+  - Mark Alexander <marka@pobox.com>
+
+targets:
+  xbs:
+    main: src/xbs.cr
+
+crystal: '>= 1.10.0'
+
+license: MIT
+
+dependencies:
+  sqlite3:
+    github: crystal-lang/crystal-sqlite3
+  logger:
+    github: crystal-lang/logger.cr

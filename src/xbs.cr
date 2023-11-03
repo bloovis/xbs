@@ -143,6 +143,26 @@ class BookmarksDB
     end
     return ""
   end
+
+  # Update bookmarks for ID, return JSON response.
+  def update_bookmarks(id : String, content_type : String, body : String)
+    if @db
+      begin
+	MyLog.debug "Attempting to update bookmarks for id #{id} in #{@dbname}:#{@table}, body '#{body}'"
+	values = Hash(String, String).from_json(body)
+	bookmarks = values["bookmarks"]
+	lastupdated = values["lastUpdated"]
+	sql = "update  #{@table} set bookmarks = ?, lastupdated = ? where uuid = ?"
+	MyLog.debug "Executing #{sql}, bookmarks = #{bookmarks}, lastupdated = #{lastupdated}, uuid = #{id}"
+	@db.exec sql, bookmarks, lastupdated, id
+	return {"lastUpdated" => lastupdated}.to_json
+      rescue ex
+	MyLog.error "sqlite3 exception: #{ex.message}"
+      end
+    end
+    return ""
+  end
+
 end
 
 class Server
@@ -153,8 +173,9 @@ class Server
   end
 
   def process_request(context : HTTP::Server::Context)
-    path = context.request.path
-    method = context.request.method
+    request = context.request
+    path = request.path
+    method = request.method
     MyLog.debug "process_request: got path #{path}, method #{method}"
 
     puts "Got request method #{method}, path #{path}"
@@ -167,7 +188,17 @@ class Server
     elsif path =~ /bookmarks\/([[:xdigit:]]+)/
       id = $1
       if method == "PUT"
-        puts "update bookmarks for #{id}"
+	body = request.body
+	if body.nil?
+	  bodystr = ""
+	else
+	  bodystr = body.gets_to_end
+	end
+	content_type = request.headers["Content-Type"]
+        puts "update bookmarks for #{id}, content-type #{content_type}, body '#{bodystr}'"
+	json = @db.update_bookmarks(id, content_type, bodystr)
+	context.response.content_type = "application/json"
+        context.response.print json
       elsif method == "GET"
         puts "get bookmarks for #{id}"
 	json = @db.get_bookmarks(id)

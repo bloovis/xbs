@@ -75,7 +75,7 @@ might be something like `/etc/letsencrypt/live/www.example.com/fullchain.pem`.
 
 To run Xbs as a server, use this:
 
-    ./xbs [config-option] server
+    ./xbs [config-option]
 
 The server will run until terminated by a Control-C or other signal.
 
@@ -99,7 +99,7 @@ from the command line.  To do this, follow these steps:
 ## Apache Reverse Proxy
 
 It is probably a good idea to run Xbs behind an Apache reverse proxy.  That
-way, Apache handle SSL (and rate limiting, if necessary), freeing Xbs
+way, Apache can handle SSL and rate limiting, freeing Xbs
 from having to deal with these complications.  To implement the reverse
 proxy, you must first enable the Apache2 proxy modules:
 
@@ -139,7 +139,7 @@ curl 'http://localhost:8090/bookmarks/ID'
 
 curl 'http://localhost:8090/bookmarks/ID/lastUpdated'
 
-## Get sync version
+### Get sync version
 
 ```
 curl 'http://localhost:8090/bookmarks/ID/version'

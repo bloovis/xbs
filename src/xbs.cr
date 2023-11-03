@@ -9,13 +9,20 @@ require "logger"
 require "uuid"
 
 class Config
+  # Required settings
   getter port : Int32
   getter db : String
+
+  # Optional settings
   getter sslport : (Int32|Nil)
   getter key : (String|Nil)
   getter cert : (String|Nil)
   getter log : (String|Nil)
   getter loglevel : (String|Nil)
+  getter version : (String|Nil)
+  getter maxsyncsize : (Int32|Nil)
+  getter status : (Int32|Nil)
+  getter message : (String|Nil)
 
   def initialize(config_file : String)
     yaml = File.open(config_file) {|file| YAML.parse(file) }
@@ -37,6 +44,29 @@ class Config
     end
     if yaml["loglevel"]?
       @loglevel = yaml["loglevel"].as_s
+    end
+
+    # Provide defaults for version, maxsyncsize, status, and message if not specifed.
+    # status: 1 = Online; 2 = Offline; 3 = Not accepting new syncs
+    if yaml["version"]?
+      @version =  yaml["version"].as_s
+    else
+      @version = "1.1.13"
+    end
+    if yaml["maxsyncsize"]?
+      @maxsyncsize = yaml["maxsyncsize"].as_i
+    else
+      @maxsyncsize = 2 * 1024 * 2024
+    end
+    if yaml["status"]?
+      @status = yaml["status"].as_i
+    else
+      @status = 1
+    end
+    if yaml["message"]?
+      @message = yaml["message"].as_s
+    else
+      @message = "Welcome to xbs, the Crystal implementation of the xBrowserSync API"
     end
   end
 end
@@ -80,11 +110,11 @@ module MyLog
 end
 
 class BookmarksDB
-  def initialize(dbname : String)	# sqlite3 database filename
+  def initialize(config : Config)
     # Set up the database connection.
+    @dbname = config.db
     @db = uninitialized DB::Database	# This avoids compiler error
-    @db = DB.open "sqlite3://#{dbname}"
-    @dbname = dbname
+    @db = DB.open "sqlite3://#{@dbname}"
     @table = "bookmarks"
     @version = "1.1.13"
 
@@ -154,8 +184,30 @@ class BookmarksDB
 	MyLog.debug "Executing #{sql}, ? = #{id}"
 	lastupdated = @db.query_one(sql, id, as: String)
 	if lastupdated
-	  MyLog.debug "Got lastupdated for #{id} from sqlite3 query #{sql}"
+	  MyLog.debug "Got lastupdated #{lastupdated} for #{id} from sqlite3 query #{sql}"
 	  return {"lastUpdated" => lastupdated}.to_json
+	else
+	  MyLog.debug "Unable to find #{id} in sqlite3"
+	end
+      rescue ex
+	MyLog.error "sqlite3 exception: #{ex.message}"
+      end
+    end
+    return ""
+  end
+
+  # Get sync version given ID, return JSON response.
+  def get_syncversion(id : String) : String
+    url = nil
+    if @db
+      begin
+	MyLog.debug "Attempting to get sync version for id #{id} from #{@dbname}:#{@table}"
+	sql = "select version from #{@table} where uuid = ?"
+	MyLog.debug "Executing #{sql}, ? = #{id}"
+	version = @db.query_one(sql, id, as: String)
+	if version
+	  MyLog.debug "Got version #{version} for #{id} from sqlite3 query #{sql}"
+	  return {"version" => version}.to_json
 	else
 	  MyLog.debug "Unable to find #{id} in sqlite3"
 	end
@@ -190,7 +242,7 @@ end
 class Server
   def initialize(config : Config)
     @config = config
-    @db = BookmarksDB.new(config.db)
+    @db = BookmarksDB.new(config)
     @server = uninitialized HTTP::Server
   end
 
@@ -204,6 +256,9 @@ class Server
     if path =~ /bookmarks\/([[:xdigit:]]+)\/version/
       id = $1
       puts "Get sync version for ID #{id}"
+      json = @db.get_syncversion(id)
+      context.response.content_type = "application/json"
+      context.response.print json
     elsif path =~ /bookmarks\/([[:xdigit:]]+)\/lastUpdated/
       id = $1
       puts "Get last updated timestamp for ID #{id}"
@@ -243,9 +298,15 @@ class Server
       end
     elsif path == "/info"
       puts "Get service information"
+      json = {"maxSyncSize" => @config.maxsyncsize,
+	      "message" => @config.message,
+	      "status" => @config.status,
+	      "version" => @config.version}.to_json
+      context.response.content_type = "application/json"
+      context.response.print json
     elsif path == "/"
       context.response.content_type = "text/plain"
-      context.response.print "Welcome to xbs, the Crystal implementation of the xBrowserSync API"
+      context.response.print @config.message
     else
       context.response.content_type = "text/plain"
       context.response.print "Unrecognized request"

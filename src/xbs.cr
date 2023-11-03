@@ -86,11 +86,12 @@ class BookmarksDB
     @db = DB.open "sqlite3://#{dbname}"
     @dbname = dbname
     @table = "bookmarks"
+    @version = "1.1.13"
 
     # Create the table if it does not already exist.
     sql = <<-SQL
       CREATE TABLE IF NOT EXISTS #{@table} (
-        id text primary key not null,
+        uuid text primary key not null,
         bookmarks text not null,
         version text not null,
         lastupdated text not null)
@@ -107,13 +108,13 @@ class BookmarksDB
 
   # Create empty bookmarks record
   def create_bookmarks
-    MyLog.debug "Adding db entry"
     id = UUID.random.hexstring
     bookmarks = ""
-    version = "?"
-    lastupdated = Time.now
+    t = Time.utc
+    lastupdated = Time::Format::ISO_8601_DATE_TIME.format(t)
+    MyLog.debug "insert into #{@table} values (#{id}, #{bookmarks}, #{@version}, #{lastupdated})"
     sql = "insert into #{@table} values (?, ?, ?, ?)"
-    @db.exec id, bookmarks, version, lastupdated
+    @db.exec sql, id, bookmarks, @version, lastupdated
   end
 
   # Get bookmarks for given ID.
@@ -169,6 +170,7 @@ class Server
     elsif path == "/bookmarks"
       if method == "PUT"
 	puts "create new bookmarks ID"
+	@db.create_bookmarks
       else
 	puts "/bookmarks not called with PUT!"
       end

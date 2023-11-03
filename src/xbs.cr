@@ -144,6 +144,28 @@ class BookmarksDB
     return ""
   end
 
+  # Get last updated timestamp for given ID, return JSON response.
+  def get_lastupdated(id : String) : String
+    url = nil
+    if @db
+      begin
+	MyLog.debug "Attempting to get lastupdated for id #{id} from #{@dbname}:#{@table}"
+	sql = "select lastupdated from #{@table} where uuid = ?"
+	MyLog.debug "Executing #{sql}, ? = #{id}"
+	lastupdated = @db.query_one(sql, id, as: String)
+	if lastupdated
+	  MyLog.debug "Got lastupdated for #{id} from sqlite3 query #{sql}"
+	  return {"lastUpdated" => lastupdated}.to_json
+	else
+	  MyLog.debug "Unable to find #{id} in sqlite3"
+	end
+      rescue ex
+	MyLog.error "sqlite3 exception: #{ex.message}"
+      end
+    end
+    return ""
+  end
+
   # Update bookmarks for ID, return JSON response.
   def update_bookmarks(id : String, content_type : String, body : String)
     if @db
@@ -185,6 +207,9 @@ class Server
     elsif path =~ /bookmarks\/([[:xdigit:]]+)\/lastUpdated/
       id = $1
       puts "Get last updated timestamp for ID #{id}"
+      json = @db.get_lastupdated(id)
+      context.response.content_type = "application/json"
+      context.response.print json
     elsif path =~ /bookmarks\/([[:xdigit:]]+)/
       id = $1
       if method == "PUT"

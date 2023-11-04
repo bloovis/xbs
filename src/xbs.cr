@@ -232,12 +232,12 @@ class BookmarksDB
   def update_bookmarks(id : String, content_type : String, body : String)
     if @db
       begin
-	MyLog.debug "Attempting to update bookmarks for id #{id} in #{@dbname}:#{@table}, body '#{body}'"
+	MyLog.debug "Attempting to update bookmarks for id #{id} in #{@dbname}:#{@table}, body '#{body[0,10]}...'"
 	values = Hash(String, String).from_json(body)
 	bookmarks = values["bookmarks"]
 	lastupdated = values["lastUpdated"]
 	sql = "update  #{@table} set bookmarks = ?, lastupdated = ? where uuid = ?"
-	MyLog.debug "Executing #{sql}, bookmarks = #{bookmarks}, lastupdated = #{lastupdated}, uuid = #{id}"
+	MyLog.debug "Executing #{sql}, bookmarks = #{bookmarks[0,10]}..., lastupdated = #{lastupdated}, uuid = #{id}"
 	@db.exec sql, bookmarks, lastupdated, id
 	return {"lastUpdated" => lastupdated}.to_json
       rescue ex

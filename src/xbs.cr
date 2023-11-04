@@ -235,7 +235,12 @@ class BookmarksDB
 	MyLog.debug "Attempting to update bookmarks for id #{id} in #{@dbname}:#{@table}, body '#{body[0,10]}...'"
 	values = Hash(String, String).from_json(body)
 	bookmarks = values["bookmarks"]
-	lastupdated = values["lastUpdated"]
+	# BUG - values["lastUpdated"] contains the "last updated timestamp to check
+	# against existing bookmarks", according to the API doc.  Should we make sure
+	# this matches the existing lastupdated value?  What should we do if they don't
+	# match?
+	t = Time.utc
+	lastupdated = Time::Format::ISO_8601_DATE_TIME.format(t)
 	sql = "update  #{@table} set bookmarks = ?, lastupdated = ? where uuid = ?"
 	MyLog.debug "Executing #{sql}, bookmarks = #{bookmarks[0,10]}..., lastupdated = #{lastupdated}, uuid = #{id}"
 	@db.exec sql, bookmarks, lastupdated, id

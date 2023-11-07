@@ -1,0 +1,102 @@
+#!/bin/sh
+
+# Send test requests to an xBrowserSync API server.
+
+url=$XBSURL
+id=$XBSID
+
+usage()
+{
+   cat << __USE__
+Usage: $0 command
+Commands:
+  new - create a new bookmark sync record, return its ID
+  get - get bookmarks for an ID
+  set <lastUpdated> <bookmarkdata> - set bookmarks for an ID/lastupdated pair,
+      return new lastUpdated
+  version - get sync version for an ID
+  last - get lastUpdated value for an ID
+  info - get service info
+
+The XBSURL environment variable must be set to the base URL for the server,
+without a trailing slash, e.g., https://www.example.com/xbs or
+http://localhost:8090
+
+The XBSID environment variable must be set to the ID of a bookmark record,
+but only for those commands that require an ID.
+__USE__
+  exit 1
+}
+
+checkurl()
+{
+  if [ -z "$url" ] ; then
+    usage
+  fi
+}
+
+checkid()
+{
+  if [ -z "$id" ] ; then
+    usage
+  fi
+}
+
+# Loop over arguments
+if [ $# -eq 0 ] ; then
+  usage
+  exit 1
+fi
+
+while [ $# -ne 0 ] ; do
+    cmd=$1
+    shift
+    case $cmd in
+    info)
+        checkurl
+	curl "$url/info"
+	echo
+	;;
+    new)
+	checkurl
+	curl -X POST "$url/bookmarks"
+	echo
+	;;
+    get)
+	checkurl
+	checkid
+	curl "$url/bookmarks/$id"
+	echo
+	;;
+    set)
+	checkurl
+	checkid
+        last=$1
+	shift
+	bookmarks=$1
+	shift
+	if [ -z "$last" -o -z "$bookmarks" ] ; then
+	  usage
+	fi
+	curl -X PUT -H "Content-Type: application/json" \
+	  -d "{\"bookmarks\":\"$bookmarks\",\"lastUpdated\":\"$last\"}" \
+	  "$url/bookmarks/$id"
+	echo
+        ;;
+    version)
+	checkurl
+	checkid
+	curl "$url/bookmarks/$id/version"
+	echo
+	;;
+    last)
+	checkurl
+	checkid
+	curl "$url/bookmarks/$id/lastUpdated"
+	echo
+	;;
+    *)
+        usage
+        ;;
+    esac
+done

@@ -145,9 +145,6 @@ class BookmarksDB
 
   # Create empty bookmarks record, return JSON response.
   def create_bookmarks : String
-    if @config.status == 3
-      return "503:xbs is not accepting new syncs"
-    end
     uuid = UUID.random.hexstring
     bookmarks = ""
     t = Time.utc
@@ -173,17 +170,18 @@ class BookmarksDB
 	          "version" => version}.to_json
 	else
 	  MyLog.debug "Unable to find #{id} in sqlite3"
-	  return "404:No such ID"
+	  return "401:Sync does not exist"
 	end
       rescue ex
 	MyLog.error "sqlite3 exception: #{ex.message}"
+	return "401:Sync does not exist"
       end
     end
     return ""
   end
 
   # Get last updated timestamp for given ID, return JSON response.
-  def get_lastupdated(id : String) : String
+  def get_lastupdated(id : String, as_json = true) : String
     url = nil
     if @db
       begin
@@ -193,13 +191,18 @@ class BookmarksDB
 	lastupdated = @db.query_one(sql, id, as: String)
 	if lastupdated
 	  MyLog.debug "Got lastupdated #{lastupdated} for #{id} from sqlite3 query #{sql}"
-	  return {"lastUpdated" => lastupdated}.to_json
+	  if as_json
+	    return {"lastUpdated" => lastupdated}.to_json
+	  else
+	    return lastupdated;
+	  end
 	else
 	  MyLog.debug "Unable to find #{id} in sqlite3"
-	  return "404:No such ID"
+	  return "401:Sync does not exist"
 	end
       rescue ex
 	MyLog.error "sqlite3 exception: #{ex.message}"
+	return "401:Sync does not exist"
       end
     end
     return ""
@@ -219,10 +222,11 @@ class BookmarksDB
 	  return {"version" => version}.to_json
 	else
 	  MyLog.debug "Unable to find #{id} in sqlite3"
-	  return "404:No such ID"
+	  return "401:Sync does not exist"
 	end
       rescue ex
 	MyLog.error "sqlite3 exception: #{ex.message}"
+	return "401:Sync does not exist"
       end
     end
     return ""
@@ -235,10 +239,19 @@ class BookmarksDB
 	MyLog.debug "Attempting to update bookmarks for id #{id} in #{@dbname}:#{@table}, body '#{body[0,10]}...'"
 	values = Hash(String, String).from_json(body)
 	bookmarks = values["bookmarks"]
-	# BUG - values["lastUpdated"] contains the "last updated timestamp to check
-	# against existing bookmarks", according to the API doc.  Should we make sure
-	# this matches the existing lastupdated value?  What should we do if they don't
-	# match?
+
+	# Check that the current version matches the expected one.
+	# If they don't match, we must be in a race condition, where
+	# another client updated the bookmarks after this client
+	# checked the lastUpdated value.  So don't write to the database,
+	# but report a confict error instead.  In theory, this should
+	# cause this client to retrieve the bookmarks.
+	check_lastupdated = values["lastUpdated"]
+	lastupdated = get_lastupdated(id, as_json: false)
+	if lastupdated != check_lastupdated
+	  return "409:A sync conflict was detected"
+	end
+
 	t = Time.utc
 	lastupdated = Time::Format::ISO_8601_DATE_TIME.format(t)
 	sql = "update  #{@table} set bookmarks = ?, lastupdated = ? where uuid = ?"
@@ -247,7 +260,7 @@ class BookmarksDB
 	return {"lastUpdated" => lastupdated}.to_json
       rescue ex
 	MyLog.error "sqlite3 exception: #{ex.message}"
-        return "404:No such ID"
+        return "401:Sync does not exist"
       end
     end
     return ""
@@ -269,7 +282,7 @@ class Server
     MyLog.debug "process_request: got path #{path}, method #{method}"
 
     if @config.status == 2
-      context.response.respond_with_status(503, "xbs is offline")
+      context.response.respond_with_status(503, "The service is currently is offline")
       return
     end
     json = ""
@@ -293,7 +306,7 @@ class Server
 	bodysize = bodystr.size
 	maxsize = @config.maxsyncsize
 	if bodysize > maxsize
-	  json = "507:Bookmark data size #{bodysize} exceeded maximum of #{maxsize} bytes"
+	  json = "413:Sync data limit exceeded"
 	else
 	  json = @db.update_bookmarks(id, content_type, bodystr)
 	end
@@ -304,7 +317,11 @@ class Server
       end
     elsif path == "/bookmarks"
       if method == "POST"
-	json = @db.create_bookmarks
+	if @config.status == 3
+	  json = "405:The service is not accepting new syncs"
+	else
+	  json = @db.create_bookmarks
+	end
       else
 	MyLog.error "/bookmarks not called with POST"
       end

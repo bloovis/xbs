@@ -122,7 +122,7 @@ Most of the commands will return a JSON response.
 ### Create bookmarks
 
 ```
-curl -X PUT 'http://localhost:8090/bookmarks'
+curl -X POST 'http://localhost:8090/bookmarks'
 ```
 
 This will return a JSON response containing the new ID (a randomly generated

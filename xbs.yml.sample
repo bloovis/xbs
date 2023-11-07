@@ -10,5 +10,6 @@ log: ./xbs.log
 loglevel: ERROR
 #version: 1.1.13
 #maxsyncsize: 1048576
+# status: 1 = Online; 2 = Offline; 3 = Not accepting new syncs.
 #status: 1
 #message: This is Xbs, a Crystal implementation of the xBrowserSync API

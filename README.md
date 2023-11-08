@@ -119,6 +119,10 @@ Xbs in one terminal session, as shown above, and in another terminal
 session, use the following commands to test the various API endpoints.
 Most of the commands will return a JSON response.
 
+There is a shell script in this  repository called `xbstest` that simplifies
+the use of the these `curl` commands.  Run the script with no
+arguments to see how to use it.
+
 ### Create bookmarks
 
 ```
@@ -146,10 +150,6 @@ curl 'http://localhost:8090/bookmarks/ID/lastUpdated'
 ```
 curl 'http://localhost:8090/bookmarks/ID/version'
 ```
-
-There is a shell script in this  repository called `xbstest` that simplifies
-the use of the these `curl` commands.  Run the script with no
-arguments to see how to use it.
 
 ### Update bookmarks
 

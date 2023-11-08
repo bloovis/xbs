@@ -147,6 +147,10 @@ curl 'http://localhost:8090/bookmarks/ID/lastUpdated'
 curl 'http://localhost:8090/bookmarks/ID/version'
 ```
 
+There is a shell script in this  repository called `xbstest` that simplifies
+the use of the these `curl` commands.  Run the script with no
+arguments to see how to use it.
+
 ### Update bookmarks
 
 Note: the following command is shown on multiple lines for clarity,

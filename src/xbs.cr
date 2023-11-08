@@ -293,7 +293,7 @@ class Server
     MyLog.debug "process_request: got path #{path}, method #{method}"
 
     if @config.status == 2
-      context.response.respond_with_status(503, "The service is currently is offline")
+      context.response.respond_with_status(503, "The service is currently offline")
       return
     end
     json = ""

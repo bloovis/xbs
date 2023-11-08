@@ -1,3 +1,6 @@
+# xbs - Crystal implementation of the xBrowserSync API.
+# See the API spec at https://api.xbrowsersync.org/
+
 require "uri"
 require "http"
 require "json"
@@ -7,6 +10,8 @@ require "option_parser"
 require "yaml"
 require "logger"
 require "uuid"
+
+# Class for reading configuration information from xbs.yml.
 
 class Config
   # Required settings
@@ -77,6 +82,8 @@ class Config
   end
 end
 
+# Logger class that reads the log level and log filename from xbs.yml
+
 module MyLog
   extend self
 
@@ -114,6 +121,8 @@ module MyLog
     @log.close
   end
 end
+
+# Class for handling accesses to the bookmarks Sqlite3 database.
 
 class BookmarksDB
   def initialize(config : Config)
@@ -268,6 +277,8 @@ class BookmarksDB
 
 end
 
+# Simple HTTP server for the xBrowserSync API.
+
 class Server
   def initialize(config : Config)
     @config = config
@@ -287,13 +298,20 @@ class Server
     end
     json = ""
     text = ""
+
+    # Use regular expressions to parse the recognized routes for the API.
+    # Most of these routes take an ID parameter, which is the 32-character
+    # UUID for a bookmark record.
     if path =~ /bookmarks\/([[:xdigit:]]+)\/version/
       id = $1
       json = @db.get_syncversion(id)
     elsif path =~ /bookmarks\/([[:xdigit:]]+)\/lastUpdated/
+      # Get the timestamp for the specified bookmark data.
       id = $1
       json = @db.get_lastupdated(id)
     elsif path =~ /bookmarks\/([[:xdigit:]]+)/
+      # GET means get the specified bookmark data.
+      # PUT means update the bookmark data.
       id = $1
       if method == "PUT"
 	body = request.body
@@ -316,6 +334,7 @@ class Server
 	json = "501:unknown method for bookmarks/ID"
       end
     elsif path == "/bookmarks"
+      # Create a new bookmark record.
       if method == "POST"
 	if @config.status == 3
 	  json = "405:The service is not accepting new syncs"
@@ -326,15 +345,21 @@ class Server
 	MyLog.error "/bookmarks not called with POST"
       end
     elsif path == "/info"
+      # Get information about this server.
       json = {"maxSyncSize" => @config.maxsyncsize,
 	      "message" => @config.message,
 	      "status" => @config.status,
 	      "version" => @config.version}.to_json
     elsif path == "/"
+      # Display a welcome message if the user mistakenly tries
+      # to access the root URL.
       text = @config.message
     else
       text = "Unrecognized request"
     end
+
+    # If there is a JSON response, send that.  As a hack, the json string
+    # can also encode an HTTP error response.
     if json.size > 0
       if json =~ /^(\d+):(.+)$/
 	# Handle special case of NNN:message, where NNN is an HTTP status code,
@@ -346,6 +371,7 @@ class Server
 	context.response.content_type = "application/json"
         context.response.print json
       end
+    # If there is a plain text response, send that.
     elsif text.size > 0
       context.response.content_type = "text/plain"
       context.response.print text
@@ -360,6 +386,11 @@ class Server
     if @server
       address = @server.bind_tcp "0.0.0.0", @config.port
       puts "Listening on http://#{address}"
+
+      # If SSL is specified, set that up.  If you have Apache
+      # available, it's probably better to NOT let xbs handle
+      # SSL, but let Apache handle it and put xbs behind a
+      # reverse proxy.
       if @config.sslport
 	ssl_context = OpenSSL::SSL::Context::Server.new
 	ssl_context.certificate_chain = @config.cert || ""
